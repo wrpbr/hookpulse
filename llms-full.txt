@@ -1,0 +1,1178 @@
+# HookPulse — full API reference
+
+> Generated from the catalog at https://hookpulse.net · build `2d690e87`
+> 31 endpoints · 13 structures
+> Short index: https://hookpulse.net/llms.txt · Spec: https://hookpulse.net/openapi.json · MCP: https://hookpulse.net/mcp
+
+> Dead-man switch for webhooks and cron: you ping, silence becomes an alert.
+
+## How to read
+
+- Every endpoint lists path, auth, parameters, body, response structure, errors and a call that runs.
+- `Pagina<Canal>` is a reference: the fields are under **Structures**, at the end, once.
+- `(optional)` on a field means it may be absent; `(may be null)` means it comes with a null value.
+- Slice what you need: `https://hookpulse.net/llms-full.txt?prefix=/api/` returns only that branch.
+
+## Authentication
+
+- `credito` — Prepaid credit token in `Authorization: Bearer cred_…` (or the `X-Credito` header). Not an account: it is a bearer of balance.
+- `none` — Public, no credential.
+- `guest` — Guest token (`POST /api/guest`) in `X-Guest-Token: hp_…` or `Authorization: Bearer hp_…`. A `sess_…` session also works.
+- `session` — Session: `Authorization: Bearer sess_…` (e-mail OTP).
+- `token` — Operator token `METRICS_TOKEN` as Bearer or `?key=`.
+- `hook` — The monitor's own token, in `?token=` or in the `X-Hook-Token` header. Read-only: state and pings — it lets you put the monitor on a third-party dashboard without handing over the owner's credential. The owner's token is also accepted on these routes.
+
+## Endpoints
+
+## Discovery
+
+### `GET /okf/:arquivo`
+
+OKF bundle (Open Knowledge Format v0.1): markdown with frontmatter so an agent reads the whole product without parsing HTML.
+
+- **URL:** `https://hookpulse.net/okf/:arquivo`
+- **Auth:** `none` — Public, no credential.
+
+**Path parameters**
+
+- `arquivo` (string, required) — `index.md`, `sobre.md`, `api.md` or `faq.md`. e.g.: `index.md`.
+
+**Response `200`**
+
+`text/markdown`. Start at `/okf/index.md`, which lists the bundle.
+
+**Errors**
+
+- `404` — File outside the bundle.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/okf/index.md
+```
+
+### `GET /.well-known/:arquivo`
+
+Machine discovery before the home page: `api-catalog` (RFC 9727, a linkset with the API and the MCP), `security.txt` (RFC 9116) and `mcp-registry-auth` (the official MCP registry key).
+
+- **URL:** `https://hookpulse.net/.well-known/:arquivo`
+- **Auth:** `none` — Public, no credential.
+
+**Path parameters**
+
+- `arquivo` (string, required) — `api-catalog`, `security.txt`, `mcp-registry-auth` or `apis.json`. e.g.: `api-catalog`.
+
+**Response `200`**
+
+`application/linkset+json` for the api-catalog; `text/plain` for the other two.
+
+**Errors**
+
+- `404` — Name outside the four published.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/.well-known/api-catalog
+```
+
+### `GET /apis.json`
+
+APIs.json (apisjson.org, 0.19): the index APIs.io harvests — the API, the MCP, OpenAPI, guide and OKF bundle in one file. Also at `/.well-known/apis.json`.
+
+- **URL:** `https://hookpulse.net/apis.json`
+- **Auth:** `none` — Public, no credential.
+
+**Response `200`**
+
+`application/json` in the APIs.json 0.19 format: `apis[]` with `baseURL`, `humanURL` and `properties[]`.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/apis.json
+```
+
+### `GET /api/`
+
+Self-describing index: the whole API surface, with quota and quickstart.
+
+- **URL:** `https://hookpulse.net/api/`
+- **Auth:** `none` — Public, no credential.
+
+**Response `200`**
+
+- `name` (string) — Product name.
+- `description` (string) — What the product does, in one sentence.
+- `build` (string) — Deployed commit.
+- `base_url` (string) — Origin this API is serving from.
+- `docs` (object) — Links to llms.txt, llms-full.txt, openapi.json, MCP and the UI.
+- `conventions` (object) — Error format, CORS, x402 and the UI↔API parity rule.
+- `auth` (object) — Each authentication mode and how to obtain it.
+- `endpoints` (object[]) — Every endpoint with method, path, auth, absolute URL and what it returns.
+- `quota` (object) — What is free, what costs and how to pay — before you spend a call.
+- `mcp` (object) — Address and transport of the MCP server.
+- `mcp_tools` (string[]) — Name of each MCP tool.
+- `quickstart` (string[]) — The calls that take you from zero to the first monitor.
+
+### `GET /api/health`
+
+Liveness and the commit deployed right now — it is how the smoke waits for its own deploy.
+
+- **URL:** `https://hookpulse.net/api/health`
+- **Auth:** `none` — Public, no credential.
+
+**Response `200`**
+
+- `ok` (bool) — Always `true` when the Worker answers.
+- `app` (string) — Product name.
+- `build` (string) — Deployed commit; CI passes the short SHA on deploy.
+- `ts` (string) — Time of the response (UTC, ISO-8601).
+
+### `POST /mcp`
+
+MCP server over HTTP (Streamable HTTP, JSON-RPC 2.0) — plugs into the client with nothing to install.
+
+The tools are the operations of this same catalog; the MCP has no backend of its own. `GET /mcp` returns the server card.
+
+- **URL:** `https://hookpulse.net/mcp`
+- **Auth:** `none` — Public, no credential.
+- Credentials go in the usual headers (X-Guest-Token, Authorization, X-PAYMENT) and are forwarded to the API.
+- An exhausted quota comes back as a 402 with accepts[] inside the tool result — pay and repeat.
+
+**Response `200`**
+
+JSON-RPC 2.0 response (`initialize`, `tools/list` or `tools/call`).
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/mcp -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+## Identity
+
+### `POST /api/guest`
+
+Creates a guest `hp_…` — it is the anonymous owner of your monitors.
+
+Keep the token: without it there is no way back to the monitors, unless you have already tied them to an e-mail.
+
+- **URL:** `https://hookpulse.net/api/guest`
+- **Auth:** `none` — Public, no credential.
+
+**Response `200`**
+
+- `token` (string) — The guest, prefix `hp_`. Send it in `X-Guest-Token` or as Bearer.
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/api/guest
+```
+
+## Monitors
+
+### `GET /api/endpoints`
+
+Lists the owner's monitors, with the state of each one.
+
+- **URL:** `https://hookpulse.net/api/endpoints`
+- **Auth:** `guest` — Guest token (`POST /api/guest`) in `X-Guest-Token: hp_…` or `Authorization: Bearer hp_…`. A `sess_…` session also works.
+
+**Response `200`**
+
+- `endpoints` (Monitor[]) — The owner's monitors, without the secret fields. → see `Monitor` under **Structures**.
+- `guest` (string, may be null) — The guest that owns this list.
+- `billing` (Billing, optional) — Prices and allowance, to decide before creating the next one. → see `Billing` under **Structures**.
+
+**Errors**
+
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/api/endpoints -H "X-Guest-Token: $HP"
+```
+
+### `POST /api/endpoints`
+
+Creates a dead-man switch: silence beyond the interval becomes an alert.
+
+This response is the only one that shows the monitor's `token` and the `templates` — keep them. The second monitor, or an interval below the free minimum, answers **402 with `accepts[]`**: pay and repeat. A miss alerts at most once per 24h (or per interval, if it is longer).
+
+- **URL:** `https://hookpulse.net/api/endpoints`
+- **Auth:** `guest` — Guest token (`POST /api/guest`) in `X-Guest-Token: hp_…` or `Authorization: Bearer hp_…`. A `sess_…` session also works.
+
+**Body** (`application/json`)
+
+- `name` (string, required) — Name to recognise the monitor in the alert.
+- `interval_sec` (int) — Tolerated silence, in seconds. Below the free minimum, it costs.
+- `alert_to` (string) — E-mail to alert on a miss; without it, the account is alerted.
+- `alert_url` (string) — Public HTTPS URL that receives a POST on a miss (Slack Incoming, Discord, n8n).
+
+**Body example**
+
+```json
+{
+  "name": "prod cron",
+  "interval_sec": 900,
+  "alert_to": "optional@email.com",
+  "alert_url": "https://n8n.example/webhook/hp"
+}
+```
+
+**Response `200`**
+
+Structure: `Monitor`.
+
+- `id` (string) — Monitor ID; it is the `:id` of the ingest URL.
+- `name` (string) — Name you gave it, to recognise it in the alert.
+- `interval_sec` (int) — Tolerated silence, in seconds. Past that, it is a miss.
+- `alert_to` (string, may be null) — E-mail alerted on a miss.
+- `alert_url` (string, may be null) — HTTPS URL that receives a POST on a miss (Slack, Discord, n8n).
+- `last_event_at` (string, may be null) — Last ping received (UTC); `null` while it never pinged.
+- `last_status` (int, may be null) — HTTP status the last ping sent, when it did.
+- `last_latency_ms` (int, may be null) — Latency reported in the last ping, in ms.
+- `miss_count` (int) — How many times this monitor has gone silent.
+- `alerted_at` (string, may be null) — When the last alert went out — it is what holds the 1 alert/24h cap.
+- `active` (bool) — Whether the monitor is on.
+- `healthy` (bool) — `true` when it has pinged at least once and is not overdue.
+- `overdue` (bool) — `true` when the silence passed `interval_sec`.
+- `waiting_first_ping` (bool) — `true` while it never pinged. Neither healthy nor overdue: nobody has wired it yet.
+- `created_at` (string) — When the monitor was created (UTC).
+- `ingest_url` (string) — The URL your cron/webhook calls to prove life.
+- `token` (string, optional) — Read token of this monitor. Only comes on creation and to the owner.
+- `status_url` (string, optional) — Status of this monitor with the token already in the query.
+- `events_url` (string, optional) — Latest pings with the token already in the query.
+- `curl_example` (string, optional) — The ingest `curl`, ready to paste in the cron.
+- `templates` (Templates, optional) — Ingest snippets and the alert body, with this monitor already in them. → see `Templates` under **Structures**.
+
+**Errors**
+
+- `400` — Empty name, invalid interval or an `alert_url` that is not public HTTPS.
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+- `402` — Quota exceeded. The response carries `accepts[]` (x402, USDC on Base): pay and repeat the same call with `X-PAYMENT`.
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/api/endpoints -H "X-Guest-Token: $HP" -H 'content-type: application/json' -d '{"name":"prod cron","interval_sec":900}'
+```
+
+### `GET /api/endpoints/:id`
+
+State of one monitor — accepts the owner's token or the monitor's own token.
+
+The monitor token only reads: it lets you put the state on a third-party dashboard without handing over the owner's credential.
+
+- **URL:** `https://hookpulse.net/api/endpoints/:id`
+- **Auth:** `hook` — The monitor's own token, in `?token=` or in the `X-Hook-Token` header. Read-only: state and pings — it lets you put the monitor on a third-party dashboard without handing over the owner's credential. The owner's token is also accepted on these routes.
+
+**Path parameters**
+
+- `id` (string, required) — Monitor ID, from `Monitor.id`.
+
+**Query**
+
+- `token` (string) — Monitor token, alternative to the `X-Hook-Token` header.
+
+**Response `200`**
+
+Structure: `Monitor`.
+
+- `id` (string) — Monitor ID; it is the `:id` of the ingest URL.
+- `name` (string) — Name you gave it, to recognise it in the alert.
+- `interval_sec` (int) — Tolerated silence, in seconds. Past that, it is a miss.
+- `alert_to` (string, may be null) — E-mail alerted on a miss.
+- `alert_url` (string, may be null) — HTTPS URL that receives a POST on a miss (Slack, Discord, n8n).
+- `last_event_at` (string, may be null) — Last ping received (UTC); `null` while it never pinged.
+- `last_status` (int, may be null) — HTTP status the last ping sent, when it did.
+- `last_latency_ms` (int, may be null) — Latency reported in the last ping, in ms.
+- `miss_count` (int) — How many times this monitor has gone silent.
+- `alerted_at` (string, may be null) — When the last alert went out — it is what holds the 1 alert/24h cap.
+- `active` (bool) — Whether the monitor is on.
+- `healthy` (bool) — `true` when it has pinged at least once and is not overdue.
+- `overdue` (bool) — `true` when the silence passed `interval_sec`.
+- `waiting_first_ping` (bool) — `true` while it never pinged. Neither healthy nor overdue: nobody has wired it yet.
+- `created_at` (string) — When the monitor was created (UTC).
+- `ingest_url` (string) — The URL your cron/webhook calls to prove life.
+- `token` (string, optional) — Read token of this monitor. Only comes on creation and to the owner.
+- `status_url` (string, optional) — Status of this monitor with the token already in the query.
+- `events_url` (string, optional) — Latest pings with the token already in the query.
+- `curl_example` (string, optional) — The ingest `curl`, ready to paste in the cron.
+- `templates` (Templates, optional) — Ingest snippets and the alert body, with this monitor already in them. → see `Templates` under **Structures**.
+
+**Errors**
+
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+- `404` — The resource does not exist (or is not yours — the API does not tell the two apart on purpose).
+
+**Example**
+
+```sh
+curl -s "https://hookpulse.net/api/endpoints/ID?token=$MONITOR_TOKEN"
+```
+
+### `PATCH /api/endpoints/:id`
+
+Changes the monitor's name, interval or alert channels.
+
+Lowering the interval below the free minimum costs: the response becomes 402 with `accepts[]` until paid.
+
+- **URL:** `https://hookpulse.net/api/endpoints/:id`
+- **Auth:** `guest` — Guest token (`POST /api/guest`) in `X-Guest-Token: hp_…` or `Authorization: Bearer hp_…`. A `sess_…` session also works.
+
+**Path parameters**
+
+- `id` (string, required) — ID of the monitor to change.
+
+**Body** (`application/json`)
+
+- `name` (string) — New monitor name, as it shows in the alert.
+- `interval_sec` (int) — New tolerated silence, in seconds.
+- `alert_to` (string) — New alert e-mail; `null` turns it off.
+- `alert_url` (string) — New alert URL; `null` turns it off.
+
+**Body example**
+
+```json
+{
+  "name": "…",
+  "interval_sec": 300,
+  "alert_to": null,
+  "alert_url": null
+}
+```
+
+**Response `200`**
+
+- `ok` (bool) — Always `true`.
+- `endpoint` (Monitor) — The monitor with the change applied. → see `Monitor` under **Structures**.
+
+**Errors**
+
+- `400` — Invalid field in the body.
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+- `402` — Quota exceeded. The response carries `accepts[]` (x402, USDC on Base): pay and repeat the same call with `X-PAYMENT`.
+- `404` — The resource does not exist (or is not yours — the API does not tell the two apart on purpose).
+
+**Example**
+
+```sh
+curl -s -XPATCH https://hookpulse.net/api/endpoints/ID -H "X-Guest-Token: $HP" -H 'content-type: application/json' -d '{"interval_sec":1800}'
+```
+
+### `DELETE /api/endpoints/:id`
+
+Deactivates the owner's monitor; it stops taking pings and alerting.
+
+- **URL:** `https://hookpulse.net/api/endpoints/:id`
+- **Auth:** `guest` — Guest token (`POST /api/guest`) in `X-Guest-Token: hp_…` or `Authorization: Bearer hp_…`. A `sess_…` session also works.
+
+**Path parameters**
+
+- `id` (string, required) — ID of the monitor to deactivate.
+
+**Response `200`**
+
+Structure: `Ok`.
+
+- `ok` (bool) — Always `true` — failure comes as a 4xx/5xx status, not as `ok:false`.
+
+**Errors**
+
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+- `404` — The resource does not exist (or is not yours — the API does not tell the two apart on purpose).
+
+**Example**
+
+```sh
+curl -s -XDELETE https://hookpulse.net/api/endpoints/ID -H "X-Guest-Token: $HP"
+```
+
+### `GET /api/endpoints/:id/events`
+
+The latest pings received at this monitor's ingest.
+
+- **URL:** `https://hookpulse.net/api/endpoints/:id/events`
+- **Auth:** `hook` — The monitor's own token, in `?token=` or in the `X-Hook-Token` header. Read-only: state and pings — it lets you put the monitor on a third-party dashboard without handing over the owner's credential. The owner's token is also accepted on these routes.
+
+**Path parameters**
+
+- `id` (string, required) — ID of the monitor.
+
+**Query**
+
+- `token` (string) — Monitor token, alternative to the `X-Hook-Token` header.
+
+**Response `200`**
+
+- `events` (Ping[]) — The most recent pings, newest first. → see `Ping` under **Structures**.
+
+**Errors**
+
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+- `404` — The resource does not exist (or is not yours — the API does not tell the two apart on purpose).
+
+**Example**
+
+```sh
+curl -s "https://hookpulse.net/api/endpoints/ID/events?token=$MONITOR_TOKEN"
+```
+
+## Ingest
+
+### `GET /in/:id`
+
+The ingest URL: this is where your cron or webhook proves it is alive.
+
+No credential on purpose — the caller is a cron, and the ID is already the secret. It costs nothing and there is no quota per ping.
+
+- **URL:** `https://hookpulse.net/in/:id`
+- **Auth:** `none` — Public, no credential.
+
+**Path parameters**
+
+- `id` (string, required) — Monitor ID, from `Monitor.ingest_url`.
+
+**Response `200`**
+
+- `ok` (bool) — Always `true` when the ping was recorded.
+
+**Errors**
+
+- `404` — The monitor does not exist or is deactivated.
+
+**Example**
+
+```sh
+curl -fsS https://hookpulse.net/in/ID
+```
+
+### `POST /in/:id`
+
+The same ingest by POST, for whoever can only send webhooks.
+
+The body is optional and records `status` and `latency_ms` along with the ping.
+
+- **URL:** `https://hookpulse.net/in/:id`
+- **Auth:** `none` — Public, no credential.
+
+**Path parameters**
+
+- `id` (string, required) — Monitor ID, from `Monitor.ingest_url`.
+
+**Body** (`application/json`)
+
+- `status` (int) — Status of the job that is pinging, to show in `Ping.status`.
+- `latency_ms` (int) — How long the job took, in ms.
+
+**Body example**
+
+```json
+{
+  "status": 200,
+  "latency_ms": 431
+}
+```
+
+**Response `200`**
+
+- `ok` (bool) — Always `true` when the ping was recorded.
+
+**Errors**
+
+- `404` — The monitor does not exist or is deactivated.
+
+**Example**
+
+```sh
+curl -fsS -XPOST https://hookpulse.net/in/ID -H 'content-type: application/json' -d '{"status":200,"latency_ms":431}'
+```
+
+## Public dashboard
+
+### `GET /api/status-feed`
+
+Returns (minting it the first time) the public status URL of all your monitors.
+
+The feed token only reads status: it does not create, change or delete. Whoever has the link sees the dashboard — treat it as a secret.
+
+- **URL:** `https://hookpulse.net/api/status-feed`
+- **Auth:** `guest` — Guest token (`POST /api/guest`) in `X-Guest-Token: hp_…` or `Authorization: Bearer hp_…`. A `sess_…` session also works.
+
+**Response `200`**
+
+Structure: `Feed`.
+
+- `token` (string) — Feed token. Read-only: it does not create, change or delete.
+- `rotated` (bool) — `true` when this call rotated the token and invalidated the previous URL.
+- `json` (string) — URL of the dashboard as JSON.
+- `rss` (string) — URL of the same dashboard as RSS 2.0.
+- `note` (string) — The warning that whoever has the link reads the dashboard.
+- `api_index` (string) — Self-describing API index.
+
+**Errors**
+
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/api/status-feed -H "X-Guest-Token: $HP"
+```
+
+### `DELETE /api/status-feed`
+
+Rotates the feed token: the previous URL stops working immediately.
+
+- **URL:** `https://hookpulse.net/api/status-feed`
+- **Auth:** `guest` — Guest token (`POST /api/guest`) in `X-Guest-Token: hp_…` or `Authorization: Bearer hp_…`. A `sess_…` session also works.
+
+**Response `200`**
+
+Structure: `Feed`.
+
+- `token` (string) — Feed token. Read-only: it does not create, change or delete.
+- `rotated` (bool) — `true` when this call rotated the token and invalidated the previous URL.
+- `json` (string) — URL of the dashboard as JSON.
+- `rss` (string) — URL of the same dashboard as RSS 2.0.
+- `note` (string) — The warning that whoever has the link reads the dashboard.
+- `api_index` (string) — Self-describing API index.
+
+**Errors**
+
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+
+**Example**
+
+```sh
+curl -s -XDELETE https://hookpulse.net/api/status-feed -H "X-Guest-Token: $HP"
+```
+
+### `GET /s/:token.json`
+
+The status dashboard as JSON, with no header at all — the token in the path is the credential.
+
+`summary.all_ok` is the field for an external monitor to check without understanding the rest. The `id` of each row is a label of this dashboard, not the ingest id — rotating the feed changes both.
+
+- **URL:** `https://hookpulse.net/s/:token.json`
+- **Auth:** `none` — Public, no credential.
+
+**Path parameters**
+
+- `token` (string, required) — Feed token, from `Feed.token`, with `.json` at the end.
+
+**Response `200`**
+
+Structure: `FeedStatus`.
+
+- `generated_at` (string) — When this dashboard was built (UTC).
+- `summary` (ResumoStatus) — The number you look at first. → see `ResumoStatus` under **Structures**.
+- `endpoints` (LinhaStatus[]) — One row per monitor, with no secret at all. → see `LinhaStatus` under **Structures**.
+- `_links` (object) — This dashboard as JSON, as RSS and the API index.
+
+**Errors**
+
+- `404` — Unknown feed token.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/s/FEED_TOKEN.json
+```
+
+### `GET /s/:token.rss`
+
+The same dashboard as RSS 2.0, for a feed reader, a chat bot or a status page.
+
+The `guid` of each item changes when the STATE changes, not on every generation — with a fixed guid the reader would never re-notify.
+
+- **URL:** `https://hookpulse.net/s/:token.rss`
+- **Auth:** `none` — Public, no credential.
+
+**Path parameters**
+
+- `token` (string, required) — Feed token, from `Feed.token`, with `.rss` at the end.
+
+**Response `200`**
+
+`application/rss+xml` — one item per monitor, with the state in the title.
+
+**Errors**
+
+- `404` — Unknown feed token.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/s/FEED_TOKEN.rss
+```
+
+### `GET /api/templates`
+
+Ingest snippets (curl, cron, n8n) and the exact JSON we POST on a miss.
+
+It exists so nobody guesses the alert format: the `miss_json` here is the same body that arrives at your `alert_url`.
+
+- **URL:** `https://hookpulse.net/api/templates`
+- **Auth:** `none` — Public, no credential.
+
+**Response `200`**
+
+- `origin` (string) — Origin used to build the snippets.
+- `templates` (Templates) — The snippets and the alert body. → see `Templates` under **Structures**.
+
+## Billing
+
+### `GET /api/billing`
+
+Free allowance, x402 prices in force and the state of the account's trial.
+
+Check before creating the second monitor or lowering the interval: it is the number IN FORCE, not the documentation's.
+
+- **URL:** `https://hookpulse.net/api/billing`
+- **Auth:** `none` — Public, no credential.
+
+**Response `200`**
+
+Structure: `Billing`.
+
+- `provider` (string) — Always `x402` — the only billing protocol accepted.
+- `mode` (string) — Seller mode: `live` charges for real, `dev` lets calls through unpaid.
+- `network` (string) — USDC network: `base` in production, `base-sepolia` in staging.
+- `chain_id` (int) — EVM chain ID of the network above, so the wallet signs on the right chain.
+- `pay_to` (string, may be null) — Address that receives the payment.
+- `homolog` (bool) — Staging seam on: the loop can be closed without spending USDC.
+- `dev` (bool) — Development mode: the 402 is simulated.
+- `dev_gate` (string, may be null) — How dev mode is unlocked, when it exists.
+- `facilitator` (string) — URL of the facilitator that verifies and settles the payment.
+- `asset` (string) — Accepted currency — always `USDC`.
+- `asset_address` (string) — USDC contract on the network above.
+- `faucet` (string, may be null) — Test-USDC faucet; only on base-sepolia.
+- `wallets` (object) — Links to wallets that speak x402 (metamask, coinbase, base_app).
+- `product` (string) — Name of the product charging.
+- `free_max_endpoints` (int) — Free monitors per owner.
+- `free_min_interval_sec` (int) — Shortest interval that is still free. Below it, it costs.
+- `free_email_alerts` (int) — Free e-mail alert registrations; the rest is paid (it is SES cost per miss).
+- `prices` (Precos) — What each paid action costs, in USD. → see `Precos` under **Structures**.
+- `usage` (object) — How much of the allowance the owner has used.
+- `trial` (Trial) — The account's trial, when there is a session. → see `Trial` under **Structures**.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/api/billing -H "X-Guest-Token: $HP"
+```
+
+### `POST /api/contact`
+
+Talks to support: a human solves Turnstile, an agent pays $0.10 in x402.
+
+The first agent message is free; after that the backoff is 60s doubling up to a 1-hour cap, announced in `Retry-After`.
+
+- **URL:** `https://hookpulse.net/api/contact`
+- **Auth:** `none` — Public, no credential.
+
+**Body** (`application/json`)
+
+- `name` (string, required) — What to call the person writing.
+- `email` (string, required) — Where to reply.
+- `message` (string, required) — What you want to say.
+- `form_ts` (int) — When the form was opened; it is the anti-robot of the human path.
+
+**Body example**
+
+```json
+{
+  "name": "…",
+  "email": "a@example.com",
+  "message": "…",
+  "form_ts": 0
+}
+```
+
+**Response `200`**
+
+- `ok` (bool) — Always `true` when the message was accepted.
+- `path` (string) — Which path it came through: human with captcha or paid agent.
+
+**Errors**
+
+- `400` — Required field missing.
+- `402` — Quota exceeded. The response carries `accepts[]` (x402, USDC on Base): pay and repeat the same call with `X-PAYMENT`.
+- `429` — Agent backoff: wait for `Retry-After`.
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/api/contact -H "X-PAYMENT: $PAYMENT" -H 'content-type: application/json' -d '{"name":"Agent","email":"a@example.com","message":"Hello"}'
+```
+
+### `POST /api/visit`
+
+Ping from the interface that increments the day's visits. Agents need not call it.
+
+Smoke does not count: `X-MM-Smoke`, User-Agent `mm-smoke` or `smoke: true` in the body come in as `counted: false`.
+
+- **URL:** `https://hookpulse.net/api/visit`
+- **Auth:** `none` — Public, no credential.
+
+**Body** (`application/json`)
+
+- `p` (string) — Path of the visited page.
+- `smoke` (bool) — `true` marks the call as a test and it does not enter the count.
+
+**Body example**
+
+```json
+{
+  "p": "/"
+}
+```
+
+**Response `200`**
+
+- `ok` (bool) — Always `true`.
+- `counted` (bool) — Whether the visit entered the day's count.
+- `reason` (string, optional) — Why it did not count, when `counted` is `false`.
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/api/visit -H 'content-type: application/json' -d '{"p":"/","smoke":true}'
+```
+
+### `GET /api/metrics`
+
+Metrics of the last 7 days. With the operator token, includes payments.
+
+Without credentials it returns visits, usage and accounts. With `METRICS_TOKEN` as Bearer it adds `payments` — and only on Base mainnet, because staging numbers on a finance panel mislead.
+
+- **URL:** `https://hookpulse.net/api/metrics`
+- **Auth:** `none` — Public, no credential.
+
+**Headers**
+
+- `Authorization` (string) — `Bearer <METRICS_TOKEN>` to include the finance block.
+
+**Response `200`**
+
+Structure: `Metricas`.
+
+- `app` (string) — Product name.
+- `today` (string) — Reference day (UTC, YYYY-MM-DD).
+- `today_visits` (int) — Visits counted today.
+- `today_contacts` (int, optional) — Contact messages received today. Only with `METRICS_TOKEN`: contact does not leave without a token.
+- `days` (object[]) — One record per day of the window, with the counts of each metric.
+- `usage` (object) — Usage per product resource — here, monitors.
+- `accounts` (object) — Total guests and accounts.
+- `financeiro` (object, optional) — Aggregate of the day: `hoje_usd`, `hoje_count`, `rede`. Only with `METRICS_TOKEN`: money does not leave without a token; the full series is `payments`.
+- `payments` (object, optional) — Finance summary; only with METRICS_TOKEN.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/api/metrics -H "Authorization: Bearer $METRICS_TOKEN"
+```
+
+## Account
+
+### `GET /api/me`
+
+The session's account, its monitors and the state of the trial.
+
+- **URL:** `https://hookpulse.net/api/me`
+- **Auth:** `session` — Session: `Authorization: Bearer sess_…` (e-mail OTP).
+
+**Response `200`**
+
+- `user` (Conta) — The person who owns the session. → see `Conta` under **Structures**.
+- `endpoints` (Monitor[]) — The account's monitors. → see `Monitor` under **Structures**.
+- `trial` (Trial) — The trial: how many days, whether active and when it ends. → see `Trial` under **Structures**.
+
+**Errors**
+
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/api/me -H "Authorization: Bearer $SESS"
+```
+
+### `POST /api/auth/start`
+
+Sends the 6-digit code by e-mail to create the account or sign in to it.
+
+- **URL:** `https://hookpulse.net/api/auth/start`
+- **Auth:** `none` — Public, no credential.
+
+**Body** (`application/json`)
+
+- `email` (string, required) — E-mail that will receive the code.
+
+**Body example**
+
+```json
+{
+  "email": "you@example.com"
+}
+```
+
+**Response `200`**
+
+Structure: `Ok`.
+
+- `ok` (bool) — Always `true` — failure comes as a 4xx/5xx status, not as `ok:false`.
+
+**Errors**
+
+- `400` — E-mail missing or malformed.
+- `429` — Too many requests for the same e-mail.
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/api/auth/start -H 'content-type: application/json' -d '{"email":"you@example.com"}'
+```
+
+### `POST /api/auth/verify`
+
+Exchanges the code for a session — and confirming the e-mail grants the trial on the spot.
+
+It is the free way out: confirming the e-mail is worth a period without the usage paywall (extra monitor and fast interval). E-mail alerts beyond the first stay paid, because they are SES cost per miss.
+
+- **URL:** `https://hookpulse.net/api/auth/verify`
+- **Auth:** `none` — Public, no credential.
+
+**Body** (`application/json`)
+
+- `email` (string, required) — The same e-mail as in `/api/auth/start`.
+- `code` (string, required) — The 6 digits that arrived by e-mail.
+
+**Body example**
+
+```json
+{
+  "email": "you@example.com",
+  "code": "123456"
+}
+```
+
+**Response `200`**
+
+- `ok` (bool) — Always `true` when the code matched.
+- `token` (string) — Session `sess_…` to use in `Authorization: Bearer`.
+- `user` (Conta) — The person who just signed in. → see `Conta` under **Structures**.
+- `trial` (Trial) — The trial, with `granted: true` when this call is the one that granted it. → see `Trial` under **Structures**.
+
+**Errors**
+
+- `400` — Wrong or expired code.
+- `429` — Too many attempts.
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/api/auth/verify -H 'content-type: application/json' -d '{"email":"you@example.com","code":"123456"}'
+```
+
+### `POST /api/auth/claim`
+
+Moves the guest's monitors to the signed-in account.
+
+- **URL:** `https://hookpulse.net/api/auth/claim`
+- **Auth:** `session` — Session: `Authorization: Bearer sess_…` (e-mail OTP).
+
+**Body** (`application/json`)
+
+- `guest_token` (string, required) — Guest `hp_…` whose monitors move to the account.
+
+**Body example**
+
+```json
+{
+  "guest_token": "hp_…"
+}
+```
+
+**Response `200`**
+
+- `ok` (bool) — Always `true`.
+- `claimed` (int) — How many monitors changed owner.
+
+**Errors**
+
+- `400` — `guest_token` missing.
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/api/auth/claim -H "Authorization: Bearer $SESS" -H 'content-type: application/json' -d '{"guest_token":"hp_…"}'
+```
+
+### `POST /api/auth/logout`
+
+Invalidates the current session.
+
+- **URL:** `https://hookpulse.net/api/auth/logout`
+- **Auth:** `session` — Session: `Authorization: Bearer sess_…` (e-mail OTP).
+
+**Response `200`**
+
+Structure: `Ok`.
+
+- `ok` (bool) — Always `true` — failure comes as a 4xx/5xx status, not as `ok:false`.
+
+**Errors**
+
+- `401` — No credential, or an invalid one. See this endpoint's auth.
+
+**Example**
+
+```sh
+curl -s -XPOST https://hookpulse.net/api/auth/logout -H "Authorization: Bearer $SESS"
+```
+
+## Credit
+
+### `POST /api/credito`
+
+Top up prepaid credit: pay once with x402 and get the token that debits on any API of the house.
+
+- **URL:** `https://hookpulse.net/api/credito`
+- **Auth:** `none` — Public, no credential.
+
+**Query**
+
+- `usd` (int, required) — Package: 1, 5, 10 ou 25 dollars.
+
+**Response `200`**
+
+- `token` (string) — Bearer token for the balance (`cred_…`). Shown ONCE — it cannot be recovered.
+- `saldo_usd` (string) — Credited balance.
+- `guarde` (string) — Warning that the token is the bearer of the credit.
+- `usar` (string) — How to present the token on paid routes.
+- `saldo_em` (string) — Where to check balance and statement.
+
+**Errors**
+
+- `400` — Package outside the list (1, 5, 10 ou 25).
+- `402` — Unpaid — the body carries the x402 `accepts[]`.
+
+**Example**
+
+```sh
+curl -s -XPOST 'https://hookpulse.net/api/credito?usd=10'
+```
+
+### `GET /api/credito`
+
+Credit balance and statement — the latest movements, without returning the token.
+
+- **URL:** `https://hookpulse.net/api/credito`
+- **Auth:** `credito` — Prepaid credit token in `Authorization: Bearer cred_…` (or the `X-Credito` header). Not an account: it is a bearer of balance.
+
+**Response `200`**
+
+- `saldo_micros` (int) — Balance in micro-dollars (1e-6 USD).
+- `saldo_usd` (string) — Formatted balance.
+- `criado_em` (string) — When the credit was opened.
+- `movimentos` (object[]) — Recent credits and debits, with product and resource.
+
+**Errors**
+
+- `401` — No token, or unknown token.
+
+**Example**
+
+```sh
+curl -s https://hookpulse.net/api/credito -H 'Authorization: Bearer cred_…'
+```
+
+## Structures
+
+### `Monitor`
+
+A dead-man switch: the thing you make ping. If the ping stops for longer than `interval_sec`, it becomes `overdue` and the alert goes out.
+
+- `id` (string) — Monitor ID; it is the `:id` of the ingest URL.
+- `name` (string) — Name you gave it, to recognise it in the alert.
+- `interval_sec` (int) — Tolerated silence, in seconds. Past that, it is a miss.
+- `alert_to` (string, may be null) — E-mail alerted on a miss.
+- `alert_url` (string, may be null) — HTTPS URL that receives a POST on a miss (Slack, Discord, n8n).
+- `last_event_at` (string, may be null) — Last ping received (UTC); `null` while it never pinged.
+- `last_status` (int, may be null) — HTTP status the last ping sent, when it did.
+- `last_latency_ms` (int, may be null) — Latency reported in the last ping, in ms.
+- `miss_count` (int) — How many times this monitor has gone silent.
+- `alerted_at` (string, may be null) — When the last alert went out — it is what holds the 1 alert/24h cap.
+- `active` (bool) — Whether the monitor is on.
+- `healthy` (bool) — `true` when it has pinged at least once and is not overdue.
+- `overdue` (bool) — `true` when the silence passed `interval_sec`.
+- `waiting_first_ping` (bool) — `true` while it never pinged. Neither healthy nor overdue: nobody has wired it yet.
+- `created_at` (string) — When the monitor was created (UTC).
+- `ingest_url` (string) — The URL your cron/webhook calls to prove life.
+- `token` (string, optional) — Read token of this monitor. Only comes on creation and to the owner.
+- `status_url` (string, optional) — Status of this monitor with the token already in the query.
+- `events_url` (string, optional) — Latest pings with the token already in the query.
+- `curl_example` (string, optional) — The ingest `curl`, ready to paste in the cron.
+- `templates` (Templates, optional) — Ingest snippets and the alert body, with this monitor already in them. → see `Templates` under **Structures**.
+
+### `Billing`
+
+Everything that decides whether the next call will cost: x402 configuration, allowance, prices and trial.
+
+- `provider` (string) — Always `x402` — the only billing protocol accepted.
+- `mode` (string) — Seller mode: `live` charges for real, `dev` lets calls through unpaid.
+- `network` (string) — USDC network: `base` in production, `base-sepolia` in staging.
+- `chain_id` (int) — EVM chain ID of the network above, so the wallet signs on the right chain.
+- `pay_to` (string, may be null) — Address that receives the payment.
+- `homolog` (bool) — Staging seam on: the loop can be closed without spending USDC.
+- `dev` (bool) — Development mode: the 402 is simulated.
+- `dev_gate` (string, may be null) — How dev mode is unlocked, when it exists.
+- `facilitator` (string) — URL of the facilitator that verifies and settles the payment.
+- `asset` (string) — Accepted currency — always `USDC`.
+- `asset_address` (string) — USDC contract on the network above.
+- `faucet` (string, may be null) — Test-USDC faucet; only on base-sepolia.
+- `wallets` (object) — Links to wallets that speak x402 (metamask, coinbase, base_app).
+- `product` (string) — Name of the product charging.
+- `free_max_endpoints` (int) — Free monitors per owner.
+- `free_min_interval_sec` (int) — Shortest interval that is still free. Below it, it costs.
+- `free_email_alerts` (int) — Free e-mail alert registrations; the rest is paid (it is SES cost per miss).
+- `prices` (Precos) — What each paid action costs, in USD. → see `Precos` under **Structures**.
+- `usage` (object) — How much of the allowance the owner has used.
+- `trial` (Trial) — The account's trial, when there is a session. → see `Trial` under **Structures**.
+
+### `Ok`
+
+Write confirmation with no body of its own to return.
+
+- `ok` (bool) — Always `true` — failure comes as a 4xx/5xx status, not as `ok:false`.
+
+### `Ping`
+
+A ping received at the ingest — the proof of life.
+
+- `at` (string) — When it arrived (UTC).
+- `status` (int, may be null) — Status reported by the caller, when it did.
+- `latency_ms` (int, may be null) — Latency reported by the caller, in ms.
+- `source` (string, may be null) — Where it came from: `get` or `post`.
+
+### `Feed`
+
+The URLs of the owner's public dashboard, with the token just minted or rotated.
+
+- `token` (string) — Feed token. Read-only: it does not create, change or delete.
+- `rotated` (bool) — `true` when this call rotated the token and invalidated the previous URL.
+- `json` (string) — URL of the dashboard as JSON.
+- `rss` (string) — URL of the same dashboard as RSS 2.0.
+- `note` (string) — The warning that whoever has the link reads the dashboard.
+- `api_index` (string) — Self-describing API index.
+
+### `FeedStatus`
+
+The owner's whole status dashboard, addressable by URL. The token in the path IS the credential — whoever has the link, reads.
+
+- `generated_at` (string) — When this dashboard was built (UTC).
+- `summary` (ResumoStatus) — The number you look at first. → see `ResumoStatus` under **Structures**.
+- `endpoints` (LinhaStatus[]) — One row per monitor, with no secret at all. → see `LinhaStatus` under **Structures**.
+- `_links` (object) — This dashboard as JSON, as RSS and the API index.
+
+### `Templates`
+
+How to ping and what we send when it fails. It is what saves guessing the format.
+
+- `ingest_curl` (string) — A `curl` that works as proof of life.
+- `ingest_cron` (string) — The equivalent crontab line.
+- `ingest_n8n` (string) — How to call the ingest from n8n.
+- `miss_json` (string) — The exact JSON we POST to `alert_url` when the silence becomes a miss.
+- `miss_url_hint` (string) — What works as `alert_url` — public HTTPS only.
+
+### `Conta`
+
+The person behind the session.
+
+- `id` (string) — ID of the account.
+- `email` (string) — E-mail confirmed by code.
+
+### `Trial`
+
+The period without the usage paywall that confirming the e-mail grants. It is the alternative to paying.
+
+- `days` (int) — Trial length in days.
+- `active` (bool) — Whether it is in force now.
+- `days_left` (int, optional) — How many days remain.
+- `ends_at` (string, may be null) — When it ends (UTC).
+- `granted` (bool, optional) — `true` when THIS call granted the trial.
+
+### `Metricas`
+
+7-day panel. `payments` only shows with the operator token and only on Base mainnet.
+
+- `app` (string) — Product name.
+- `today` (string) — Reference day (UTC, YYYY-MM-DD).
+- `today_visits` (int) — Visits counted today.
+- `today_contacts` (int, optional) — Contact messages received today. Only with `METRICS_TOKEN`: contact does not leave without a token.
+- `days` (object[]) — One record per day of the window, with the counts of each metric.
+- `usage` (object) — Usage per product resource — here, monitors.
+- `accounts` (object) — Total guests and accounts.
+- `financeiro` (object, optional) — Aggregate of the day: `hoje_usd`, `hoje_count`, `rede`. Only with `METRICS_TOKEN`: money does not leave without a token; the full series is `payments`.
+- `payments` (object, optional) — Finance summary; only with METRICS_TOKEN.
+
+### `Precos`
+
+Prices in force, in dollars. Read them here, not from the documentation.
+
+- `extra_endpoint_usd` (number) — Monitor beyond the allowance.
+- `fast_interval_usd` (number) — Interval below the free minimum.
+- `email_alert_usd` (number) — E-mail alert registration beyond the first.
+- `contact_agent_usd` (number) — Agent contact.
+
+### `ResumoStatus`
+
+The set in numbers. `all_ok` is the field for an external monitor to check without understanding the rest.
+
+- `total` (int) — Monitors on the dashboard.
+- `ok` (int) — Active and healthy.
+- `overdue` (int) — Active and silent beyond the interval.
+- `waiting_first_ping` (int) — Active ones that never pinged.
+- `inactive` (int) — Deactivated.
+- `all_ok` (bool) — `true` only with at least one monitor, none overdue and none waiting for the first ping — one that never pinged does not count as healthy.
+
+### `LinhaStatus`
+
+A monitor on the public dashboard: enough to know the state, with no token, no e-mail and no ingest id.
+
+- `id` (string) — Stable label of THIS dashboard, derived from the pair (feed token, monitor) — it is not the ingest id, and it changes when the owner rotates the token. The real id does not leave here because `GET /in/:id` asks for no credential: publishing it would give whoever only reads the power to reset the silence counter.
+- `name` (string) — Name given by the owner.
+- `status` (string) — State in one word.
+- `healthy` (bool) — Whether it is healthy now.
+- `overdue` (bool) — Whether it is silent beyond the interval.
+- `interval_sec` (int) — Tolerated silence, in seconds.
+- `last_event_at` (string, may be null) — Last ping (UTC).
+- `miss_count` (int) — How many misses have happened.
+- `alerts` (object) — Which alert channels are on: `{ email, url }` — booleans, never the address.
+
+
+## Quota
+
+- Free: dead-man endpoints — 10 per owner.
+- Free: minimum interval at no cost — 90s.
+- Free: ingest (`/in/:id`) — no charge per ping.
+- Free: webhook alert (`alert_url`) — no quota — it is a fetch of ours.
+- Free: e-mail alert (`alert_to`) — 1 registration.
+- Free: status dashboard by URL (JSON and RSS) — no quota.
+- Paid: endpoint beyond the allowance — **$0.10** USDC via x402.
+- Paid: interval below the free minimum — **$0.05** USDC via x402.
+- Paid: e-mail alert registration beyond the 1st — **$0.10** USDC via x402.
+- Paid: agent contact — **$0.10** USDC via x402.
+
+- Trial: sign up and CONFIRM the e-mail → **90 days** of full access, free. Loop: POST /api/auth/start {"email":"you@example.com"} → code arrives by e-mail → POST /api/auth/verify {"email":"...","code":"123456"} → 90 days without the usage paywall (extra endpoints and fast intervals; e-mail alerts beyond the 1st stay $0.10)
+
+Past the allowance → **402** with `accepts[]` (x402, USDC on Base). Pay and repeat the same call with `X-PAYMENT`.
+
+Numbers in force: https://hookpulse.net/api/billing
