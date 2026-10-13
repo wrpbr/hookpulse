@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "hookpulse": {
+      "type": "http",
+      "url": "https://hookpulse.net/mcp?checkout=site"
+    }
+  }
+}

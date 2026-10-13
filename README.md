@@ -1,84 +1,114 @@
-# HookPulse
+# HookPulse — skill and MCP server for AI agents
 
-> A dead man's switch for cron jobs and webhooks: your job pings a URL; silence beyond the interval becomes an alert.
+<img src="assets/icon.png" alt="HookPulse" width="72" align="right">
 
-**Live:** https://hookpulse.net · **API index:** https://hookpulse.net/api/ · **OpenAPI:** https://hookpulse.net/openapi.json · **MCP server:** https://hookpulse.net/mcp · **Docs for agents:** https://hookpulse.net/llms.txt
+HookPulse tells you when a cron job, webhook, backup or scheduled GitHub Actions workflow stops running. Each
+routine gets a check-in link. If the check-in does not arrive by the expected time, or the routine reports a
+failure, HookPulse sends an alert by e-mail or to a webhook such as Slack or Discord, and it tells you when the
+routine comes back. This repository packages the HookPulse skill and the connection to its remote MCP server for
+Claude Code, Codex, Cursor and other agents.
 
-## What it does
+**Site:** https://hookpulse.net · **MCP server:** `https://hookpulse.net/mcp?checkout=site` ·
+**Prices:** https://hookpulse.net/pricing · **API docs:** https://hookpulse.net/developers
 
-HookPulse watches for silence. A backup that did not run, a cron that died, a webhook that stopped arriving — none of them raise an error, so HookPulse turns the absence into one.
+## What your agent can do
 
-Create a monitor (name, interval), get a private check-in link, and make the job call it: `curl -fsS https://hookpulse.net/in/ID` at the end of the script, or a GET/POST from n8n, Make, Zapier or a GitHub Action. Every five minutes HookPulse compares the last ping with the interval; a miss goes out by e-mail or as a JSON POST (`type: hookpulse.miss`, `last_event_at`, `interval_sec`) to your alert URL, at most once every 24 hours per monitor. The last pings, latency and a body preview stay on the monitor page; a status page is available as JSON and RSS.
+- Create a monitor for a routine, with an interval or a cron schedule, a time zone and an allowed delay.
+- Import a crontab: see the proposed monitors first, then create them in one call.
+- Give each run a start, a success or a failure signal, with the shell exit code.
+- Instrument a whole fleet with one setup key: the first check-in of each name creates its monitor.
+- Read the state of every monitor, the latest check-ins and the public status page.
 
-## Quickstart (no account)
+Try: *"Import my crontab into HookPulse and show me what it would create."* or
+*"Create a monitor for the nightly backup that runs at 03:00 São Paulo time."*
 
-Snippets for curl, cron and n8n, and the exact JSON posted on a miss:
+## GitHub Actions
 
-```bash
-curl -s https://hookpulse.net/api/templates
+A scheduled workflow gets a monitor with one step and no secret. The job's identity token tells HookPulse which
+repository and workflow it is; the first run creates the monitor with the workflow's schedule:
+
+```yaml
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./backup.sh
+      - uses: wrpbr/hookpulse-action@v1
+        if: always()
+        with:
+          status: ${{ job.status }}
 ```
 
-Self-described API index (how to create a monitor without an account):
+See [wrpbr/hookpulse-action](https://github.com/wrpbr/hookpulse-action) for alerts and options. Without changing
+any workflow, install the [HookPulse GitHub App](https://github.com/apps/hookpulse-actions-monitor): a missed or
+failed scheduled run opens an issue in the repository, and the next good run closes it.
 
-```bash
-curl -s https://hookpulse.net/api/
+## Install
+
+Claude Code, as a plugin with the skill and the MCP server:
+
+```
+/plugin marketplace add wrpbr/hookpulse
+/plugin install hookpulse@hookpulse
 ```
 
-What your job runs at the end (replace YOUR_ID):
+Any agent that reads Agent Skills (Claude Code, Codex, Cursor, OpenCode and others):
 
 ```bash
-curl -fsS https://hookpulse.net/in/YOUR_ID
+npx skills add wrpbr/hookpulse
 ```
 
-## MCP server (remote, nothing to install)
-
-Streamable HTTP over the same public API. Every tool is a call on this API; `operationId` in the OpenAPI is the tool name. Server card: `GET https://hookpulse.net/mcp`.
-
-Claude Code:
+Only the MCP server (remote, Streamable HTTP, no key needed to start):
 
 ```bash
-claude mcp add --transport http hookpulse https://hookpulse.net/mcp
+claude mcp add --transport http hookpulse 'https://hookpulse.net/mcp?checkout=site'   # Claude Code
+codex mcp add hookpulse --url 'https://hookpulse.net/mcp?checkout=site'               # Codex
 ```
-
-Cursor (`.cursor/mcp.json`):
 
 ```json
-{
-  "mcpServers": {
-    "hookpulse": {
-      "url": "https://hookpulse.net/mcp"
-    }
-  }
-}
+{ "mcpServers": { "hookpulse": { "url": "https://hookpulse.net/mcp?checkout=site" } } }
 ```
 
-Main tools: `create_endpoint`, `list_endpoints`, `get_endpoint`, `list_events`, `ping_ingest`, `status_feed_url`, `list_templates`, `create_guest`.
+The JSON above goes in `.cursor/mcp.json` for Cursor and in the MCP settings of most other clients. The GitHub
+Copilot coding agent takes it in the repository settings, under Copilot → MCP servers, with `"type": "http"` and
+the tools you allow.
 
-## Pricing
+## Price
 
-**Free.** Ten monitors, intervals from 90 seconds, one alert e-mail, unlimited pings and a status page, without an account. Confirm an e-mail and get 90 days without limits.
+Ten monitors are free, and check-ins have no charge. E-mail alerts on one monitor are free; e-mail alerts on each
+additional monitor cost a one-time fee. Alerts to webhooks have no alert charge. You buy credit on the site, and
+nothing renews automatically. The plugin never pays: with `checkout=site`, the MCP server has no purchase tool and
+no payment argument. The current prices are at https://hookpulse.net/pricing.
 
-**Paid.** Per request (x402) or prepaid credit: an extra monitor US$ 0.10, intervals under 90 seconds US$ 0.05, an extra alert e-mail US$ 0.10.
+## What the plugin sends
 
-## What it is not
+The skill tells the agent to call the HookPulse API at hookpulse.net. The MCP server also runs at hookpulse.net.
+The names, schedules and alert destinations of your monitors go to hookpulse.net over HTTPS. The plugin runs no
+local program and reads no local file; the crontab import reads only the text you paste.
 
-It is not uptime monitoring: it never calls your endpoints; your job calls it.
+## Em português
 
-## Files in this repository
+O HookPulse avisa quando uma rotina agendada, um webhook, um backup ou um workflow agendado do GitHub Actions para
+de rodar. Cada rotina ganha um link de check-in; se ele não chega no horário, ou se a rotina avisa uma falha, o
+alerta sai por e-mail ou por webhook. Este repositório traz a skill e a conexão com o servidor MCP remoto. Instale
+com os comandos acima. Dez monitores são grátis. Os preços estão em https://hookpulse.net/pricing.
 
-| | |
+## Files
+
+| File | What it is |
 |---|---|
-| `README.md` | this page |
-| `openapi.json` | OpenAPI 3 document; `operationId` = MCP tool name |
-| `llms.txt` | short guide for agents (endpoints, auth, pricing, MCP) |
-| `llms-full.txt` | full reference: params, body, response field by field, errors (when published) |
-| `apis.json` | APIs.json index (APIs.io) |
-| `mcp/server.json` | manifest published in the Official MCP Registry (`net.hookpulse/hookpulse`) |
-| `okf/` | OKF bundle: markdown with front-matter (index, about, API, FAQ) |
-| `examples/` | `curl.sh` and `python.py` with the free calls above |
+| `skills/hookpulse/SKILL.md` | The skill: which tool answers which question, and the rules for alerts and limits |
+| `.mcp.json` | The remote MCP server of the plugin |
+| `.claude-plugin/plugin.json` | The plugin manifest |
+| `.claude-plugin/marketplace.json` | Lets Claude Code add this repository as a plugin marketplace |
+| `server.json` | The manifest in the official MCP registry (`net.hookpulse/hookpulse`) |
+| `glama.json` | The maintainer for the Glama MCP directory |
 
-## About this repository
+## License and contact
 
-This repository mirrors the public, machine-readable surfaces of HookPulse as served at https://hookpulse.net: the OpenAPI document, the `llms.txt` guide, the MCP registry manifest, the OKF bundle and the APIs.json index. The product itself is not open source; the mirror exists so the API and the MCP server can be found, read and linked from here. Files are regenerated from the live surfaces (last sync: 2026-09-05); if something here disagrees with the site, the site is right.
-
-Issues and suggestions are welcome here. Contact: contato@hookpulse.net. Author: Wendel ([@wrpbr](https://github.com/wrpbr)).
+The files in this repository are under the MIT-0 license. The HookPulse service is not part of this license: its
+use follows the [terms of use](https://hookpulse.net/terms) and the [privacy policy](https://hookpulse.net/privacy).
+For questions or problems, open an issue here or write to contato@hookpulse.net.

@@ -1,0 +1,31 @@
+{
+  "name": "hookpulse",
+  "displayName": "HookPulse",
+  "version": "1.0.0",
+  "description": "Know when a cron job, webhook, backup or scheduled GitHub Actions workflow stops running. Each routine gets a check-in link; a missed or failed run sends an alert by e-mail or webhook. Create monitors, import a crontab and read the status page through a skill and the remote MCP server.",
+  "author": {
+    "name": "HookPulse",
+    "email": "contato@hookpulse.net",
+    "url": "https://hookpulse.net"
+  },
+  "homepage": "https://hookpulse.net",
+  "repository": "https://github.com/wrpbr/hookpulse",
+  "license": "MIT-0",
+  "keywords": [
+    "cron",
+    "dead-mans-switch",
+    "heartbeat",
+    "monitoring",
+    "github-actions",
+    "webhooks",
+    "alerting",
+    "uptime",
+    "mcp",
+    "agent-skills"
+  ],
+  "icon": "./assets/icon.png",
+  "documentationUrl": "https://hookpulse.net/developers",
+  "supportUrl": "https://github.com/wrpbr/hookpulse/issues",
+  "privacyPolicyUrl": "https://hookpulse.net/privacy",
+  "termsOfServiceUrl": "https://hookpulse.net/terms"
+}
