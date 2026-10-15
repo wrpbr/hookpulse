@@ -13,8 +13,8 @@ recovery message.
 
 ## Connect
 
-- MCP server (preferred): `https://hookpulse.net/mcp?checkout=site`. Transport: Streamable HTTP. With
-  `checkout=site`, the person buys on the site and the agent never pays.
+- MCP server (preferred): `https://hookpulse.net/mcp?checkout=site`. Transport: Streamable HTTP. Every MCP tool is
+  free, within its free limits: no payment.
 - HTTP API: base URL `https://hookpulse.net`. Each MCP tool calls one route of this API.
 - Identity: `create_guest` returns a guest token `hp_…`. Send it as `X-Guest-Token` on later calls. Keep it: the
   monitors belong to it until the person signs in on the site.
@@ -40,15 +40,14 @@ recovery message.
 | `ping_slug` | `GET /in/{key}/{slug}` | Check in by name with the setup key, creating the monitor the first time. |
 | `status_feed_url` | `GET /api/status-feed` | Get the public status page and feed of all monitors of the owner. |
 | `list_templates` | `GET /api/templates` | Get ready snippets: curl, crontab line, n8n, GitHub Actions and the alert JSON. |
-| `billing` | `GET /api/billing` | Read the free allowances, prices and the account trial. |
-| `pricing` | `GET /api/pricing` | Read the current prices. |
 
 ## Rules
 
-1. Read `billing` before you create more than ten monitors or add e-mail alerts to more than one monitor. Do not
-   use a price from memory.
-2. Never pay by yourself. If a call returns HTTP 402, show the price and https://hookpulse.net/pricing to the user.
-   The person buys on the site.
+1. If an MCP tool answers `free_limit`, tell the user that the free limit for that action is used up. Before you
+   create more than ten monitors, read the free allowances at `GET /api/billing` on the HTTP API. Do not use an
+   allowance from memory.
+2. Never pay by yourself. On the HTTP API, a paid route returns HTTP 402: show the price and
+   https://hookpulse.net/pricing to the user. The person buys on the site.
 3. The monitor ID is a credential: whoever has it can send check-ins and silence the alarm. Do not print it in
    public logs or issues. The status page link is the one to share.
 4. A start or failure signal is not proof of life. Only a success check-in resets the expected time.

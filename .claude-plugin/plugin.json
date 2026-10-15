@@ -1,7 +1,7 @@
 {
   "name": "hookpulse",
   "displayName": "HookPulse",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Know when a cron job, webhook, backup or scheduled GitHub Actions workflow stops running. Each routine gets a check-in link; a missed or failed run sends an alert by e-mail or webhook. Create monitors, import a crontab and read the status page through a skill and the remote MCP server.",
   "author": {
     "name": "HookPulse",
