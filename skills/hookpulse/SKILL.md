@@ -1,6 +1,6 @@
 ---
 name: hookpulse
-description: Monitor cron jobs, webhooks, backups and scheduled GitHub Actions workflows with HookPulse (hookpulse.net), a dead man's switch. Create a monitor with an interval or a cron schedule, import a crontab, send start, success and failure signals with the exit code, instrument a fleet with one setup key, and read monitor state, check-ins and the public status page. A missed or failed run alerts by e-mail or webhook. Use when a task mentions a cron job, crontab, scheduled task, heartbeat, dead man's switch, missed run, backup that stopped, or a GitHub Actions schedule.
+description: Monitor cron jobs, webhooks, backups, scheduled GitHub Actions workflows and websites with HookPulse (hookpulse.net), a dead man's switch and site checker. Create a monitor with an interval or a cron schedule, import a crontab, send start, success and failure signals with the exit code, instrument a fleet with one setup key, check a website on an interval, and read monitor state, check-ins and the public status page. A missed or failed run, or a site that goes down, alerts by e-mail or webhook. Use when a task mentions a cron job, crontab, scheduled task, heartbeat, dead man's switch, missed run, backup that stopped, a GitHub Actions schedule, or a website that must stay up.
 license: MIT-0
 compatibility: Needs HTTPS access to hookpulse.net. Works with the remote MCP server or with plain HTTP calls.
 ---
@@ -9,12 +9,13 @@ compatibility: Needs HTTPS access to hookpulse.net. Works with the remote MCP se
 
 HookPulse watches routines that should run on a schedule. The routine sends a check-in to its link when it runs.
 If the check-in is late, or the routine reports a failure, HookPulse sends an alert. The next good check-in sends a
-recovery message.
+recovery message. HookPulse also checks websites: it calls the address on an interval and alerts when the site goes
+down and when it is back.
 
 ## Connect
 
-- MCP server (preferred): `https://hookpulse.net/mcp?checkout=site`. Transport: Streamable HTTP. Every MCP tool is
-  free, within its free limits: no payment.
+- Direct MCP: `https://hookpulse.net/mcp`. Streamable HTTP, with free and paid API operations.
+- Directory connector: `https://hookpulse.net/mcp?checkout=site`. The person purchases on the site.
 - HTTP API: base URL `https://hookpulse.net`. Each MCP tool calls one route of this API.
 - Identity: `create_guest` returns a guest token `hp_…`. Send it as `X-Guest-Token` on later calls. Keep it: the
   monitors belong to it until the person signs in on the site.
@@ -27,6 +28,9 @@ recovery message.
 |---|---|---|
 | `create_guest` | `POST /api/guest` | Get the guest token that owns the monitors. |
 | `create_endpoint` | `POST /api/endpoints` | Create a monitor: `interval_sec`, or `cron` + `tz` + `grace_sec`, and the alert destinations. |
+| `create_site` | `POST /api/endpoints` | Check a website: `check.url`, and optionally `expect_status`, `keyword` and `interval_sec` (default 300). |
+| `check_site` | `POST /api/endpoints/{id}/check` | Check a site now. One call every 10 seconds per host. |
+| `list_sites` | `GET /api/sites/estado` | Read every site with its state and last check. |
 | `import_crontab` | `POST /api/import/crontab` | Read a crontab and propose one monitor per line. Nothing is written without `apply=1`. |
 | `list_endpoints` | `GET /api/endpoints` | List the monitors and their state. |
 | `get_endpoint` | `GET /api/endpoints/{id}` | Read one monitor: state, next expected time, last check-in. |
@@ -46,8 +50,11 @@ recovery message.
 1. If an MCP tool answers `free_limit`, tell the user that the free limit for that action is used up. Before you
    create more than ten monitors, read the free allowances at `GET /api/billing` on the HTTP API. Do not use an
    allowance from memory.
-2. Never pay by yourself. On the HTTP API, a paid route returns HTTP 402: show the price and
-   https://hookpulse.net/pricing to the user. The person buys on the site.
+2. Spend only within the user's explicit authority and budget. Read `pricing` and `billing` first.
+   Direct MCP x402 uses `params._meta["x402/payment"]`; HTTP uses `PAYMENT-SIGNATURE`.
+   Prepaid credit uses `Authorization: Bearer cred_…` or `X-Credito`.
+   In `checkout=site`, the person pays at https://hookpulse.net/pricing with an offered method.
+   Pix and card details stay on the site. ChatGPT mode uses existing rights without offering purchases.
 3. The monitor ID is a credential: whoever has it can send check-ins and silence the alarm. Do not print it in
    public logs or issues. The status page link is the one to share.
 4. A start or failure signal is not proof of life. Only a success check-in resets the expected time.
@@ -55,6 +62,10 @@ recovery message.
 6. If you get HTTP 429 or 503, wait for the time in `Retry-After` and try once more.
 
 ## Examples
+
+For a single paid URL check without an account or monitor, use `get_api_x402_check`.
+It returns the quote before payment and the reading after authorized payment.
+Creating monitors, faster intervals, extra e-mail alerts and plans follow their current allowances and prices.
 
 ```bash
 # Guest token, then a monitor for a backup at 03:00 São Paulo time with 15 minutes of allowed delay
@@ -64,9 +75,15 @@ curl -s -XPOST https://hookpulse.net/api/endpoints -H "X-Guest-Token: $HP" -H 'c
 
 # At the end of the routine: the exit code of the last command
 curl -fsS "https://hookpulse.net/in/$ID/$?"
+
+# A website, checked every 5 minutes: down when it does not answer 200-399 or the page lacks "Welcome"
+curl -s -XPOST https://hookpulse.net/api/endpoints -H "X-Guest-Token: $HP" -H 'content-type: application/json' \
+  -d '{"check":{"url":"https://example.com/","keyword":"Welcome"}}'
 ```
 
 ## Limits
 
 - The service checks monitors every five minutes, so an alert can arrive up to five minutes after the allowed delay.
+- A site is down after two failed checks in a row, one minute apart. Private networks and addresses with a user name
+  or password are refused.
 - Terms: https://hookpulse.net/terms. Privacy: https://hookpulse.net/privacy. Contact: contato@hookpulse.net.
