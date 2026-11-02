@@ -7,22 +7,25 @@ compatibility: HTTPS access to hookpulse.net; remote MCP or HTTP.
 
 # HookPulse
 
-MCP tools: `create_guest`, `create_endpoint`, `create_site`.
+MCP tools: `create_endpoint`, `create_site`.
 
 Let the service keep the schedule, detect missing runs and send alerts after your agent session ends.
 
 ## First monitor
 
-Use `create_guest` once and keep the private owner token.
 Use `create_endpoint` or `POST https://hookpulse.net/api/endpoints` within the free coverage.
+Reuse an existing owner token. Without one, creation returns `guest_token`; keep it private for later calls.
 For a routine, set `cron`, `tz` and `grace_sec`, or the documented interval.
 Arrange for the routine to send its success or failure signal.
 For a public site, use `create_site` with `check.url`.
+Set `alert_to` or `alert_url` to an authorized destination. A monitor without a channel does not deliver notices.
 Read the returned setup and keep the monitor credential private.
 
 Verify a check-in or site check, the monitor state and recovery before leaving it running.
 A start or failure signal is not a success check-in.
 A backup heartbeat does not prove that the backup restores.
+Read `state` for status. A declared failure stays unhealthy until a success signal.
+`alerted_at` tracks incident processing, not notification receipt.
 
 ## Expand when needed
 
