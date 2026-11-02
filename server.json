@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "net.hookpulse/hookpulse",
-  "description": "Dead-man switch for cron and webhooks: ingest URL, miss detection, alerts and a status feed.",
+  "description": "Know when a job stops or a site goes down after the agent exits. Free monitors; paid extra coverage.",
   "version": "1.0.1",
   "repository": { "url": "https://github.com/wrpbr/hookpulse", "source": "github" },
   "websiteUrl": "https://hookpulse.net",
