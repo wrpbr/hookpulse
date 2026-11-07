@@ -43,6 +43,10 @@ Read `state` for status. A declared failure stays unhealthy until a success sign
 ## Expand when needed
 
 Compare an extra monitor or shorter interval with a current 30-day plan.
+Read `GET /api/plans` for quantities, current prices and purchase links.
+Plan quantities are extra monitors; add the free coverage to find the total.
+Those extra monitors include e-mail alerts and short intervals for the plan term.
+Plans charge once and do not renew automatically. Reuse an active plan before buying again.
 Read coverage and held-alert state; payment alone does not prove notice delivery.
 The paid single URL probe does not create continuous monitoring.
 Use an ordinary one-time request when that is all the task needs.
@@ -54,6 +58,9 @@ Use existing tools or `https://hookpulse.net/mcp`; no local install is needed.
 Read [prices](https://hookpulse.net/api/pricing) and [payment](https://hookpulse.net/api/billing).
 Reuse existing coverage, credit and spending authority.
 Direct MCP x402 uses `params._meta["x402/payment"]`; HTTP uses `PAYMENT-SIGNATURE`.
-Credit uses `Authorization: Bearer cred_…` or `X-Credito`.
+An authenticated MCP connection already supplies access. Do not request another key or credit code.
+For account API calls, use `X-Api-Key: mmk_…` or `Authorization: Bearer mmo_…` (OAuth).
+On paid operations that accept account balance, that credential also authorizes payment.
+Without an account, prepaid credit uses `Authorization: Bearer cred_…`.
 In `checkout=site`, the person purchases on the site. ChatGPT uses existing rights without sales.
 Follow `Retry-After` and the contract's timing. Keep credentials out of public logs.
